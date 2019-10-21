@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 
 def bbox_to_ellipse(obb):
-    """ 
+    """
         Return an ellipse from an oriented bbox/
         obb: [x, y, w, h, angle]  (angle in degrees)
     """
@@ -32,29 +32,28 @@ def bbox_to_ellipse(obb):
 def test_bbox_to_ellipse():
     bbox = [5.0, 1.0, 8.0, 4.0, 10.0]
     ellipse = bbox_to_ellipse(bbox)
-    
+
     xmin, xmax = -100, 100
     ymin, ymax = -100, 100
     scale = 10
-    
+
     y, x = np.mgrid[ymin:ymax+1, xmin:ymax+1]
     pts = np.vstack((x.flatten(), y.flatten(), np.ones_like(x.flatten()))).T
     pts = pts.astype(np.float)
     pts[:, :2] /= scale
-    
+
     d = [p.dot(ellipse).dot(p) for p in pts]
     indices = np.where(np.abs(d) < 0.01)[0]
     good_points = pts[indices, :]
-    
+
     axes = plt.gca()
     axes.set_xlim([xmin/scale,xmax/scale])
     axes.set_ylim([ymin/scale,ymax/scale])
     plt.scatter(good_points[:, 0], good_points[:, 1])
     plt.axes().set_aspect('equal', 'datalim')
 
-    
 
-    
+
 def compute_B(P):
     p11, p12, p13, p14 = P[0, :]
     p21, p22, p23, p24 = P[1, :]
@@ -66,7 +65,7 @@ def compute_B(P):
                   [p31*p21, p31*p22+p32*p21, p33*p21+p31*p23, p34*p21+p31*p24, p32*p22, p32*p23+p33*p22, p32*p24+p34*p22, p33*p23, p33*p24+p34*p23, p34*p24],
                   [p31**2, 2*p32*p31, 2*p33*p31, 2*p34*p31, p32**2, 2*p33*p32, 2*p34*p32, p33**2, 2*p33*p34, p34**2]])
     return B
-    
+
 def compute_ellipsoids_overlap(Q1, Q2, samples=100):
     """
         Comute the overlapping between two ellipsoids.
@@ -76,14 +75,14 @@ def compute_ellipsoids_overlap(Q1, Q2, samples=100):
 #    Q1 = -Q1 / np.sign(Q1[0, 0])
     Q2 = -Q2 / Q2[3, 3]
 #    Q2 = -Q2 / np.sign(Q2[0, 0])
-    
+
     bbx1 = ellipsoid_to_bbox(Q1)
     bbx2 = ellipsoid_to_bbox(Q2)
-    
+
     bbx_envelope = bbx1
     bbx_envelope[:, 0] = np.minimum(bbx1[:, 0], bbx2[:, 0])
     bbx_envelope[:, 1] = np.minimum(bbx1[:, 1], bbx2[:, 1])
-    
+
     x, y, z = np.mgrid[:samples+1, :samples+1, :samples+1]
     pts = np.vstack((x.flatten(), y.flatten(), z.flatten())).T.astype(np.float)
     pts /= samples
@@ -91,22 +90,21 @@ def compute_ellipsoids_overlap(Q1, Q2, samples=100):
     pts[:, 1] *= (bbx_envelope[1, 1] - bbx_envelope[1, 0]) + bbx_envelope[1, 0]
     pts[:, 2] *= (bbx_envelope[2, 1] - bbx_envelope[2, 0]) + bbx_envelope[2, 0]
     pts = np.hstack((pts, np.ones((pts.shape[0], 1))))
-    
+
     Q1_primal = np.linalg.inv(Q1)      # primal quadrics
     Q2_primal = np.linalg.inv(Q2)
-    
+
     d1 = np.asarray([p @ Q1_primal @ p.T for p in pts])
     d2 = np.asarray([p @ Q2_primal @ p.T for p in pts])
-    
+
     in_Q1 = d1 <= 0
     in_Q2 = d2 <= 0
     in_Q1_and_Q2 = np.logical_and(in_Q1, in_Q2)
-    
+
     intersection = float(np.sum(in_Q1_and_Q2))
     union = float(np.sum(in_Q1) + np.sum(in_Q2)- intersection)
     return intersection / union
-    
-    
+
 
 
 def ellipsoid_to_bbox(Q):
@@ -118,18 +116,18 @@ def ellipsoid_to_bbox(Q):
     """
     x0 = (Q[3, 0] + np.sqrt(Q[3, 0]**2 - Q[3,3] * Q[0, 0])) / Q[3, 3]
     x1 = -(-Q[3, 0] + np.sqrt(Q[3, 0]**2 - Q[3,3] * Q[0, 0])) / Q[3, 3]
-    
+
     y0 = (Q[3, 1] + np.sqrt(Q[3, 1]**2 - Q[3,3] * Q[1, 1])) / Q[3, 3]
     y1 = -(-Q[3, 1] + np.sqrt(Q[3, 1]**2 - Q[3,3] * Q[1, 1])) / Q[3, 3]
-    
+
     z0 = (Q[3, 2] + np.sqrt(Q[3, 2]**2 - Q[3,3] * Q[2, 2])) / Q[3, 3]
     z1 = -(-Q[3, 2] + np.sqrt(Q[3, 2]**2 - Q[3,3] * Q[2, 2])) / Q[3, 3]
-    
+
     bbox = [[min(x0, x1), max(x0, x1)],
             [min(y0, y1), max(y0, y1)],
             [min(z0, z1), max(z0, z1)]]
     return np.asarray(bbox)
-    
+
 
 
 def test_compute_ellipsoids_overlap():
@@ -140,13 +138,139 @@ def test_compute_ellipsoids_overlap():
     T = np.eye(4)
     T[0, 3] = 1.0
     Tinv = np.linalg.inv(T)
-    
+
     q1 = Tinv.T @ q1 @ Tinv
-        
+
     q2 = np.array([[1.0, 0.0, 0.0, 0.0],
                    [0.0, 1.0, 0.0, 0.0],
                    [0.0, 0.0, 1.0, 0.0],
                    [0.0, 0.0, 0.0, -1.0]])
-        
+
     iou = compute_ellipsoids_overlap(np.linalg.inv(q1), np.linalg.inv(q2), 50)
     print("IoU = ", iou)
+
+
+def reconstruct_objects(proj_matrices, ellipses, obj_appeareances, method, x_est):
+    """ This function reconstruct the ellipsoids from ellipses observations
+        in images and camera motion matrices
+        x_est: estimated quadric center (this enables a better preconditioning)
+    """
+
+    # Only objects visible at least 3 times can be reconstructed
+    nb_views = np.sum(obj_appeareances, 0)
+    reconstructible_indices = np.where(nb_views > 2)[0]
+
+    for i in reconstructible_indices:
+        visibility = obj_appeareances[:, i]
+        n_views = np.sum(visibility)
+        selector = np.kron(visibility, [1, 1, 1].T)
+        P = proj_matrices[selector, :]
+        C = ellipses[selector, i:i+3]
+        print(P.shape, C.shape)
+
+        T = np.eye(4)
+        T[:3, 3] = x_est
+
+        P_new = np.zeros_like(P)
+        for vi in n_views:
+            P_new[vi*3:vi*3+3, :] = (T.T @  P[vi*3:vi*3+3, :].T).T
+
+        if method == "SVD":
+            Qadj = reconstruct_ellipsoid(P_new, C)
+        else:
+            print("Unknown method")
+
+        Qadj = T @ Qadj @ T.T
+        Qadj = 0.5 * (Qadj + Qadj.T)
+        Qadj /= -Qadj[3, 3]
+        return Qadj
+
+
+def decompose_ellipse(C):
+    """
+        Decompose an ellipse into 2 half-axis,
+        an orientation and a center. (returned in this order)
+    """
+    if C[2, 2] > 0:
+        C = -C / C[2, 2]
+    center = -C[:2, 2]
+    T = np.array([[1.0, 0.0, -center[0]],
+                  [0.0, 1.0, -center[1]],
+                  [0.0, 0.0, 1.0]])
+    C_center = T @ C @ T.T
+    # force symetry
+    C_center = 0.5 * (C_center + C_center.T)
+
+    D, V = np.linalg.eig(C_center[:2, :2])
+    ax = np.sqrt(np.abs(D))
+
+    return ax, V, center
+
+def sym2vec(M):
+    """
+        Return the lower triangular part of a symetric matrix
+    """
+    res = []
+    N = M.shape[0]
+    for i in range(N):
+        res.extend(M[i:, i])
+    return np.asarray(res)
+
+def vec2sym(v):
+    """
+        Return a symetric matrix from a lower triangular part.
+    """
+    x = 1
+    n = 1
+    while n < v.size:
+        x += 1
+        n += x
+    M = np.zeros((n, n), dtype=np.float)
+    a = 0
+    for i in range(n):
+        M[i:, i] = v[a:a+(n-i)]
+        a += (n-i)
+    return M
+
+
+def reconstruct_ellipsoid(Ps, Cs):
+    """
+        This functions reconstruct an ellipsoid from multiview ellipses
+        and return the matrix of its dual representation
+    """
+
+    n_views = Cs.shape[0] // 3
+    M = np.zeros((6 * n_views, 10 + n_views))
+    for i in range(n_views):
+        C = Cs[i*3:i*3+3, :]
+
+        ax, R, center = decompose_ellipse(C)
+
+        h = np.sqrt(np.sum(ax**2))
+        H = np.array([[h, 0.0, center[0]],
+                      [0.0, h, center[1]],
+                      [0.0, 0.0, 1.0]])
+        H_inv = np.linalg.inv(H)
+
+        P = Ps[i*3:i*3+3, :]
+        new_P = P.T @ H_inv.T
+
+        B = compute_B(new_P)
+
+        # normalize and center ellipsoid
+        C_nc = H @ C @ H.T
+        C_nc_vec = sym2vec(C_nc)
+        C_nc_vec /= -C_nc_vec[-1]
+
+
+        M[6*i:6*i+6, :10] = B
+        M[6*i:6*i+6, i] = -C_nc_vec
+
+    print("Reconstruction method: SVD")
+    U, S, Vt = np.linalg.svd(M)
+    w = Vt[-1, :]
+    Qadj_vec = w[:10]
+    Qadj = vec2sym(Qadj_vec)
+
+    return Qadj
+
