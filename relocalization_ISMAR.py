@@ -23,7 +23,7 @@ A = np.diag([1.0/a**2, 1.0/b**2, 1.0/c**2])
 
 # Camera parameters
 orientation = np.eye(3, dtype=float)
-position = np.array([0.0, 0.0, -2.0])
+position = np.array([0.0, 0.0, -4.0])
 pose = np.hstack((orientation, position.reshape((-1, 1))))
 Rt = np.hstack((orientation.T, -orientation.T.dot(position.reshape((-1, 1)))))
 
@@ -108,7 +108,7 @@ K = np.divide(num_K, denom_K)
 K = np.nan_to_num(K)
 
 K_vec = np.diag(K)
-k = np.sign(delta[2]) * np.sqrt(np.mean(K_vec))
+k = np.sign(delta[2]) * np.sqrt(np.mean(K_vec[np.nonzero(K_vec)]))
 
 Delta = k * delta
 Ew = Rw_c @ Delta + C.reshape((-1, 1))

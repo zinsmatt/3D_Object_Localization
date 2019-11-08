@@ -4,8 +4,10 @@
 @author: Matthieu Zins
 """
 
+import os
 import numpy as np
 import matplotlib.pyplot as plt
+from Pose_Manipulation import pose_interpolation
 
 
 def bbox_to_ellipse(obb):
@@ -154,25 +156,32 @@ def reconstruct_objects(proj_matrices, ellipses, obj_appeareances, method, x_est
     """ This function reconstruct the ellipsoids from ellipses observations
         in images and camera motion matrices
         x_est: estimated quadric center (this enables a better preconditioning)
+              [3 x n_objects]
     """
 
     # Only objects visible at least 3 times can be reconstructed
     nb_views = np.sum(obj_appeareances, 0)
     reconstructible_indices = np.where(nb_views > 2)[0]
 
+    quadrics = []
     for i in reconstructible_indices:
         visibility = obj_appeareances[:, i]
         n_views = np.sum(visibility)
-        selector = np.kron(visibility, [1, 1, 1].T)
+        selector = np.kron(visibility, np.array([1, 1, 1]).T).astype(bool)
+        print(selector)
         P = proj_matrices[selector, :]
-        C = ellipses[selector, i:i+3]
-        print(P.shape, C.shape)
+        C = ellipses[selector, i*3:i*3+3]
+        print("P shape ", P.shape)
+        print("C shape ", C.shape)
+        print(P)
+        print(C)
+    
 
         T = np.eye(4)
-        T[:3, 3] = x_est
+        T[:3, 3] = x_est[:, i]
 
         P_new = np.zeros_like(P)
-        for vi in n_views:
+        for vi in range(n_views):
             P_new[vi*3:vi*3+3, :] = (T.T @  P[vi*3:vi*3+3, :].T).T
 
         if method == "SVD":
@@ -180,10 +189,15 @@ def reconstruct_objects(proj_matrices, ellipses, obj_appeareances, method, x_est
         else:
             print("Unknown method")
 
+        print("Qadj = ", Qadj)
+
         Qadj = T @ Qadj @ T.T
         Qadj = 0.5 * (Qadj + Qadj.T)
+        print("Qadj = ", Qadj)
         Qadj /= -Qadj[3, 3]
-        return Qadj
+
+        quadrics.append(Qadj)
+    return quadrics
 
 
 def decompose_ellipse(C):
@@ -191,6 +205,7 @@ def decompose_ellipse(C):
         Decompose an ellipse into 2 half-axis,
         an orientation and a center. (returned in this order)
     """
+    print("CCC ", C)
     if C[2, 2] > 0:
         C = -C / C[2, 2]
     center = -C[:2, 2]
@@ -204,6 +219,9 @@ def decompose_ellipse(C):
     D, V = np.linalg.eig(C_center[:2, :2])
     ax = np.sqrt(np.abs(D))
 
+    print("ax = ", ax)
+    print("V = ", V)
+    print("center = ", center)
     return ax, V, center
 
 def sym2vec(M):
@@ -220,16 +238,18 @@ def vec2sym(v):
     """
         Return a symetric matrix from a lower triangular part.
     """
+    print(v)
     x = 1
     n = 1
     while n < v.size:
         x += 1
         n += x
-    M = np.zeros((n, n), dtype=np.float)
+    print(x)
+    M = np.zeros((x, x), dtype=np.float)
     a = 0
-    for i in range(n):
-        M[i:, i] = v[a:a+(n-i)]
-        a += (n-i)
+    for i in range(x):
+        M[i:, i] = v[a:a+(x-i)]
+        a += (x-i)
     return M
 
 
@@ -238,11 +258,15 @@ def reconstruct_ellipsoid(Ps, Cs):
         This functions reconstruct an ellipsoid from multiview ellipses
         and return the matrix of its dual representation
     """
+    print("Cs = ", Cs)
+    
 
     n_views = Cs.shape[0] // 3
     M = np.zeros((6 * n_views, 10 + n_views))
     for i in range(n_views):
         C = Cs[i*3:i*3+3, :]
+        
+        print(C)
 
         ax, R, center = decompose_ellipse(C)
 
@@ -250,23 +274,29 @@ def reconstruct_ellipsoid(Ps, Cs):
         H = np.array([[h, 0.0, center[0]],
                       [0.0, h, center[1]],
                       [0.0, 0.0, 1.0]])
+        print("H= ", H)
         H_inv = np.linalg.inv(H)
 
         P = Ps[i*3:i*3+3, :]
-        new_P = P.T @ H_inv.T
+        new_P = (P.T @ H_inv.T).T
 
+        print("new_P ",  new_P)
         B = compute_B(new_P)
+        
+        print("C ", C)
 
         # normalize and center ellipsoid
         C_nc = H @ C @ H.T
+        print("C_nc = ", C_nc)
         C_nc_vec = sym2vec(C_nc)
         C_nc_vec /= -C_nc_vec[-1]
 
 
         M[6*i:6*i+6, :10] = B
-        M[6*i:6*i+6, i] = -C_nc_vec
+        M[6*i:6*i+6, 10+i] = -C_nc_vec
 
     print("Reconstruction method: SVD")
+    print(M[:, -1])
     U, S, Vt = np.linalg.svd(M)
     w = Vt[-1, :]
     Qadj_vec = w[:10]
@@ -274,3 +304,68 @@ def reconstruct_ellipsoid(Ps, Cs):
 
     return Qadj
 
+
+dataset_folder = "/home/matt/dev/3D_Object_Localization/Dataset/rgbd_dataset_freiburg2_desk/"
+gt_poses_filename = os.path.join(dataset_folder, "groundtruth.txt")
+images_folder = os.path.join(dataset_folder, "rgb")
+
+
+detection_associations_file = "/home/matt/dev/3D_Object_Localization/ellipses_association/Yolo_c/assoc_yolo_c.txt"
+tmp, ext = os.path.splitext(detection_associations_file)
+images_to_use_file = tmp + ".used_images" + ext
+
+# Load images to use
+images_filenames = []
+images_timestamps = []
+with open(images_to_use_file, "r") as fin:
+    lines = fin.readlines()
+    images_filenames = [os.path.splitext(f)[0]+".png" for f in lines]
+    images_timestamps = [float(os.path.splitext(os.path.basename(f))[0]) for f in lines]
+    
+# Load gt poses
+poses_data = np.loadtxt(gt_poses_filename)
+poses_timestamps = poses_data[:, 0]
+poses = np.hstack((poses_data[:, 4:], poses_data[:, 1:4]))
+
+
+K = np.array([[520.9, 0.0, 325.1],
+              [0.0, 521.0, 249.7],
+              [0.0, 0.0, 1.0]])
+
+P = []
+for t, img_f in zip(images_timestamps, images_filenames):
+    d = np.abs(poses_timestamps - t)
+    
+    min_index = np.argmin(d)
+    
+    if d[min_index] > 0.02:
+        print("Warning: unsure pose")
+    
+    M = pose_interpolation.pose_quat_to_matrix(poses[min_index])
+    Rt = np.linalg.inv(M)
+    
+    Proj = K @ Rt[:3, :]
+    P.append(Proj)
+P = np.vstack(P)
+    
+
+# Load ellipses
+C = np.loadtxt(detection_associations_file)
+C = C[:, :3]
+
+# Compute visibility
+n_objects = C.shape[1] // 3
+n_images = C.shape[0] // 3
+visibility = np.ones((n_images, n_objects), dtype=int)
+for i in range(n_images):
+    for j in range(n_objects):
+        if np.abs(C[3*i+2, 3*j+2]) < 1e-5:
+            visibility[i, j] = 0
+
+quad_centers = np.zeros((3, n_objects), dtype=np.float)
+quadrics = reconstruct_objects(P, C, visibility, "SVD", quad_centers)
+
+
+output_file = "/home/matt/dev/3D_Object_Localization/quadrics.txt"
+quadrics = np.vstack(quadrics)
+np.savetxt(output_file, quadrics)
