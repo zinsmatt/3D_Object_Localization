@@ -4,6 +4,7 @@
 @author: Matthieu Zins
 """
 
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 import os
@@ -156,6 +157,7 @@ def reconstruct_objects(proj_matrices, ellipses, obj_appeareances, method, x_est
     """ This function reconstruct the ellipsoids from ellipses observations
         in images and camera motion matrices
         x_est: estimated quadric center (this enables a better preconditioning)
+              [3 x n_objects]
     """
 
     # Only objects visible at least 3 times can be reconstructed
@@ -188,11 +190,14 @@ def reconstruct_objects(proj_matrices, ellipses, obj_appeareances, method, x_est
         Qadj /= -Qadj[3, 3]
         print(Qadj)
 
+        print("Qadj = ", Qadj)
+
         Qadj = T @ Qadj @ T.T
         Qadj = 0.5 * (Qadj + Qadj.T)
+        print("Qadj = ", Qadj)
         Qadj /= -Qadj[3, 3]
         quadrics.append(Qadj)
-        
+
     return quadrics
 
 
@@ -201,6 +206,7 @@ def decompose_ellipse(C):
         Decompose an ellipse into: half-axes, rotation and center
         C: adjointe matrix of the ellipse (dual form)
     """
+    print("CCC ", C)
     if C[2, 2] > 0:
         C = -C / C[2, 2]
     center = -C[:2, 2]
@@ -227,6 +233,7 @@ def vec2sym(v):
     """
         Return a symetric matrix from a lower triangular part.
     """
+    print(v)
     x = 1
     n = 1
     while n < v.size:
@@ -246,11 +253,15 @@ def reconstruct_ellipsoid(Ps, Cs):
         This functions reconstruct an ellipsoid from multiview ellipses
         and return the matrix of its dual representation
     """
+    print("Cs = ", Cs)
+
 
     n_views = Cs.shape[0] // 3
     M = np.zeros((6 * n_views, 10 + n_views))
     for i in range(n_views):
         C = Cs[i*3:i*3+3, :]
+
+        print(C)
 
         ax, R, center = decompose_ellipse(C)
 #        print("ax center = ", ax, center)
@@ -262,14 +273,14 @@ def reconstruct_ellipsoid(Ps, Cs):
 #        print("H = ", H)
         H_inv = np.linalg.inv(H)
 #        print(H_inv)
-        
+
         P = Ps[i*3:i*3+3, :]
         new_P = P.T @ H_inv.T
-        
-        
+
+
 
         B = compute_B(new_P.T)
-        
+
 
         # normalize and center ellipsoid
         C_nc = H_inv @ C @ H_inv.T
@@ -281,6 +292,7 @@ def reconstruct_ellipsoid(Ps, Cs):
 
 
     print("Reconstruction method: SVD")
+    print(M[:, -1])
     U, S, Vt = np.linalg.svd(M)
 #    print(S)
 #    print(U.shape)
@@ -320,20 +332,20 @@ images = []
 projections = []
 for f in images_to_use:
     images.append(cv2.imread(f))
-    
+
     time = float(os.path.splitext(f)[0])
-    
+
     d = np.abs(timestamps - time)
     index = np.argmin(d)
-    
+
     rotation = R.from_quat(orientations[index, :])
     Rc_w = rotation.as_dcm().T
     Tc_w = - Rc_w.dot(positions[index, :])
-    
+
     Rt = np.hstack((Rc_w, Tc_w.reshape((-1, 1))))
     projections.append(K @ Rt)
 projections = np.vstack(projections)
-    
+
 n_images = C.shape[0] // 3
 n_objects = C.shape[1] // 3
 print(n_images, " images")
@@ -344,10 +356,10 @@ for i in range(n_images):
     for j in range(n_objects):
         if abs(C[i*3+2, j*3+2]) > 1e-3:
             to_use[i, j] = 1
-            
+
 
 centers = np.zeros((3, n_objects), dtype=float)
-    
+
 quadrics = reconstruct_objects(projections, C, to_use, "SVD", centers)
 
 # update the estimated centers of the ellipsoids
@@ -360,7 +372,5 @@ quadrics = reconstruct_objects(projections, C, to_use, "SVD", centers)
 
 
 
-    
-np.savetxt("ellipsoids_python.txt", np.vstack(quadrics))
-    
 
+np.savetxt("ellipsoids_python.txt", np.vstack(quadrics))
