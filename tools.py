@@ -7,7 +7,6 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-import os
 from scipy.spatial.transform import Rotation as R
 import cv2
 
@@ -309,6 +308,10 @@ def reconstruct_ellipsoid(Ps, Cs):
 
     return Qadj
 
+
+
+
+# ----------------------------------------------------------------------------
 dataset_folder = "/home/mzins/Dataset/rgbd_dataset_freiburg2_desk/"
 gt_poses_file = os.path.join(dataset_folder, "groundtruth.txt")
 rgb_images_folder = os.path.join(dataset_folder, "rgb")
