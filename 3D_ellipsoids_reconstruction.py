@@ -220,13 +220,13 @@ def project_ellipsoids(quadrics, P):
 #   - images_to_use: a matrix n_views x n_objects indicating the visibility of 
 #      each object in each view
 
-dataset_folder = "/home/mzins/Dataset/rgbd_dataset_freiburg2_desk/"
+dataset_folder = "/home/matt/dev/3D_Object_Localization/Dataset/rgbd_dataset_freiburg2_desk/"
 gt_poses_file = os.path.join(dataset_folder, "groundtruth.txt")
 rgb_images_folder = os.path.join(dataset_folder, "rgb")
 
 # these two files are generated with the Detections Association Tool
-detection_associations = "/home/mzins/dev/3D-Object-Localisation/ellipses_association/more_objects/maskrcnn.txt"
-images_to_use_file = "/home/mzins/dev/3D-Object-Localisation/ellipses_association/more_objects/maskrcnn.used_images.txt"
+detection_associations = "/home/matt/dev/3D_Object_Localization/ellipses_association/more_objects/maskrcnn.txt"
+images_to_use_file = "/home/matt/dev/3D_Object_Localization/ellipses_association/more_objects/maskrcnn.used_images.txt"
 
 C = np.loadtxt(detection_associations)
 K = np.array([[520.9, 0.0, 325.1],
@@ -251,7 +251,7 @@ for f in images_to_use:
 
     rotation = R.from_quat(orientations[index, :])
     Rc_w = rotation.as_dcm().T
-    Tc_w = - Rc_w.dot(positions[index, :])
+    Tc_w = -Rc_w.dot(positions[index, :])
 
     Rt = np.hstack((Rc_w, Tc_w.reshape((-1, 1))))
     projections.append(K @ Rt)
